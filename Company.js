@@ -23,6 +23,15 @@ const Company = sequelize.define(
     members: {
       type: DataTypes.TEXT,
     },
+    created_date: {
+      type: DataTypes.DATE,
+    },
+    source: {
+      type: DataTypes.STRING,
+    },
+    page: {
+      type: DataTypes.STRING,
+    },
     url: {
       type: DataTypes.STRING,
       unique: true, // Ensure the URL is unique to avoid duplicates
@@ -33,4 +42,4 @@ const Company = sequelize.define(
   }
 );
 
-module.exports = Company;
+module.exports = { Company, sequelize };

@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Company List</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-100 p-4">
+
+  <!-- CSV Upload Form -->
+  <div class="max-w-screen-xl mx-auto bg-white p-4 rounded-lg shadow-md mb-6">
+    <h2 class="text-2xl font-bold mb-4">Upload CSV</h2>
+    <form id="csvForm" action="/import" method="POST" enctype="multipart/form-data">
+      <input type="file" name="file" accept=".csv" class="mb-4">
+      <button type="submit" class="bg-blue-500 text-white px-4 py-2 rounded">Upload CSV</button>
+      <div id="uploadSpinner" class="hidden mt-2">
+        <svg class="animate-spin h-5 w-5 text-blue-500 mx-auto" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path fill="none" d="M0 0h24v24H0z"/><path d="M12 4V1L8 5l4 4V4zm0 16v-3l4-4-4-4v3zm7-7h-2v2h2v-2zm-2 4h2v-2h-2v2zM6 12H4v2h2v-2zm4 4H6v-2h4v2zm4-12H10v2h4V4z"/></svg>
+      </div>
+      <div id="uploadMessage" class="mt-4 text-green-500"></div>
+    </form>
+  </div>
+
+  <!-- Search Form -->
+  <div class="max-w-screen-xl mx-auto bg-white p-4 rounded-lg shadow-md mb-6">
+    <h2 class="text-2xl font-bold mb-4">Search Companies</h2>
+    <form id="searchForm" class="mb-4">
+      <input type="text" name="search" placeholder="Search by company name..." class="p-2 border border-gray-300 rounded mb-2 w-full">
+      <input type="date" name="startDate" class="p-2 border border-gray-300 rounded mb-2 w-full">
+      <input type="date" name="endDate" class="p-2 border border-gray-300 rounded mb-4 w-full">
+      <button type="submit" class="bg-green-500 text-white px-4 py-2 rounded">Search</button>
+    </form>
+  </div>
+
+  <!-- Company List -->
+  <div class="max-w-screen-xl mx-auto bg-white p-4 rounded-lg shadow-md">
+    <h2 class="text-2xl font-bold mb-4">Company List</h2>
+    <div id="companyList"></div>
+    <!-- Pagination Controls -->
+    <div id="paginationControls" class="max-w-lg mx-auto bg-white p-4 rounded-lg shadow-md mt-6">
+        <button id="prevPage" class="bg-gray-300 text-gray-700 px-4 py-2 rounded" disabled>Previous</button>
+        <span id="pageInfo" class="mx-4"></span>
+        <button id="nextPage" class="bg-gray-300 text-gray-700 px-4 py-2 rounded">Next</button>
+    </div>
+  </div>
+  
+
+  <script>
+    // Handle CSV upload success message and spinner
+    document.getElementById('csvForm').addEventListener('submit', async function (e) {
+      e.preventDefault();
+      const formData = new FormData(e.target);
+      
+      // Show spinner and hide message
+      document.getElementById('uploadSpinner').classList.remove('hidden');
+      document.getElementById('uploadMessage').textContent = '';
+
+      try {
+        const response = await fetch('/import', {
+          method: 'POST',
+          body: formData
+        });
+
+        const message = await response.text();
+        
+        // Hide spinner and display success message
+        document.getElementById('uploadSpinner').classList.add('hidden');
+        document.getElementById('uploadMessage').textContent = message;
+      } catch (error) {
+        // Hide spinner and display error message
+        document.getElementById('uploadSpinner').classList.add('hidden');
+        document.getElementById('uploadMessage').textContent = 'An error occurred during the upload.';
+      }
+    });
+
+    // Handle company search
+    document.getElementById('searchForm').addEventListener('submit', async function (e) {
+      e.preventDefault();
+      const formData = new FormData(e.target);
+      const queryString = new URLSearchParams(formData).toString();
+
+      const response = await fetch(`/companies?${queryString}`);
+      const data = await response.json();
+
+      let companyListHtml = '';
+      data.data.forEach(company => {
+        companyListHtml += `
+          <div class="border-b border-gray-300 py-2">
+            <h3 class="text-lg font-semibold">${company.name}</h3>
+            <p class="text-sm text-gray-500">Website: ${company.website}</p>
+            <p class="text-sm text-gray-500">Source: ${company.source}</p>
+            <p class="text-sm text-gray-500">Created Date: ${new Date(company.created_date).toLocaleDateString()}</p>
+          </div>`;
+      });
+      document.getElementById('companyList').innerHTML = companyListHtml;
+    });
+
+    let currentPage = 1;
+  const pageSize = 100;
+
+  function updatePaginationControls(currentPage, totalPages) {
+    const prevButton = document.getElementById('prevPage');
+    const nextButton = document.getElementById('nextPage');
+    const pageInfo = document.getElementById('pageInfo');
+
+    // Update button states
+    prevButton.disabled = currentPage === 1;
+    nextButton.disabled = currentPage === totalPages;
+
+    // Update page info
+    pageInfo.textContent = `Page ${currentPage} of ${totalPages}`;
+
+    // Set up button click handlers
+    prevButton.onclick = () => {
+      if (currentPage > 1) {
+        currentPage--;
+        loadCompanies(currentPage);
+      }
+    };
+
+    nextButton.onclick = () => {
+      if (currentPage < totalPages) {
+        currentPage++;
+        loadCompanies(currentPage);
+      }
+    };
+  }
+
+    // Fetch and display the initial company list
+    async function loadCompanies(page = 1) {
+        const response = await fetch(`/companies?page=${page}&pageSize=100`);
+        const data = await response.json();
+        
+        let companyListHtml = '';
+        data.data.forEach(company => {
+            companyListHtml += `
+            <div class="border-b border-gray-300 py-2">
+                <h3 class="text-lg font-semibold">${company.name}</h3>
+                <p class="text-sm text-gray-500">Website: ${company.website}</p>
+                <p class="text-sm text-gray-500">Source: ${company.source}</p>
+                <p class="text-sm text-gray-500">Created Date: ${new Date(company.created_date).toLocaleDateString()}</p>
+            </div>`;
+        });
+        
+        // Update pagination controls
+        document.getElementById('companyList').innerHTML = companyListHtml;
+        updatePaginationControls(data.currentPage, data.pages);
+    }
+    // Initial load
+    loadCompanies();
+  </script>
+</body>
+</html>

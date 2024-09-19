@@ -8,36 +8,52 @@ const Company = require("./Company");
 
 const baseURL = "https://www.wantedly.com";
 
-const startPage = 1;
-const endPage = 1000;
+const startPage = 1786;
+const endPage = 2000;
 
 // Function to fetch company links
 async function getCompaniesLinks(page) {
   try {
-    const browser = await puppeteer.launch();
+    // Launch Puppeteer in headful mode and simulate a desktop environment
+    const browser = await puppeteer.launch({
+      headless: false, // Launch in headful mode so you can see the browser
+      args: ["--start-maximized"], // Start maximized (optional)
+    });
+
     const pageInstance = await browser.newPage();
 
-    await pageInstance.goto(
-      `${baseURL}/projects?new=true&page=${page}&order=popular`,
-      {
-        waitUntil: "networkidle0", // Ensure that network requests are done
-      }
+    // Set the user agent to simulate a desktop browser (e.g., Chrome)
+    await pageInstance.setUserAgent(
+      "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
     );
 
-    // Wait for a specific selector that appears after the data has fully loaded
-    await pageInstance.waitForSelector('a[href^="/companies"]');
+    // Set a larger viewport size to mimic desktop resolution
+    await pageInstance.setViewport({ width: 1366, height: 768 });
 
-    // Get page content after it fully loads
+    await pageInstance.goto(`${baseURL}/projects?&page=${page}`, {
+      waitUntil: "networkidle0", // Ensure that network requests are done
+    });
+
+    // Wait for the specific section that contains the job posts to appear
+    await pageInstance.waitForSelector(
+      'section[class^="ProjectListJobPostsLaptop"]'
+    );
+
+    // Get the page content after the section has fully loaded
     const content = await pageInstance.content();
     const $ = cheerio.load(content);
 
     const links = [];
-    $('a[href^="/companies"]').each((i, element) => {
-      const href = $(element).attr("href");
-      if (href) {
-        links.push(baseURL + href);
+
+    // Target only the section with the class prefix "ProjectListJobPostsLaptop"
+    $('section[class^="ProjectListJobPostsLaptop"] a[href^="/companies"]').each(
+      (i, element) => {
+        const href = $(element).attr("href");
+        if (href) {
+          links.push(baseURL + href);
+        }
       }
-    });
+    );
 
     await browser.close();
     return links;
@@ -99,7 +115,7 @@ async function getCompanyDetails(companyURL) {
 }
 
 // Function to save company details using Sequelize
-async function saveCompanyToDatabase(companyDetails, companyURL) {
+async function saveCompanyToDatabase(companyDetails, companyURL, page) {
   const { companyName, address, website, foundedDate, founded, members } =
     companyDetails;
 
@@ -114,6 +130,9 @@ async function saveCompanyToDatabase(companyDetails, companyURL) {
         foundedDate,
         founded,
         members: members.join(", "),
+        created_date: new Date(),
+        source: baseURL,
+        page: page,
       },
     });
     console.log(`Saved company: ${companyName}`);
@@ -129,23 +148,16 @@ async function saveCompanyToDatabase(companyDetails, companyURL) {
     await sequelize.sync(); // Sync the model with the database
     console.log("Database connected and synced.");
 
-    const results = [];
-    const listCompanyUrl = [];
-
     for (let page = startPage; page <= endPage; page++) {
       console.log(`Fetching page ${page}...`);
       const linksFromPage = await getCompaniesLinks(page);
-      linksFromPage.forEach((link) => listCompanyUrl.push(link));
-      console.log(listCompanyUrl);
-    }
-
-    for (const link of listCompanyUrl) {
-      console.log(`Crawling company ${link}...`);
-
-      const companyDetails = await getCompanyDetails(link);
-      if (companyDetails) {
-        await saveCompanyToDatabase(companyDetails, link); // Save to database
-        results.push(companyDetails);
+      for (const link of linksFromPage) {
+        // Use for...of to handle async properly
+        console.log(`Crawling company ${link}...`);
+        const companyDetails = await getCompanyDetails(link); // Fetch company details
+        if (companyDetails) {
+          await saveCompanyToDatabase(companyDetails, link, page); // Save the details to the database
+        }
       }
     }
 
